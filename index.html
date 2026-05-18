@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音声10分割ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Outfit:wght@300;500;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0c0c;--surface:#161616;--surface2:#1f1f1f;--border:#2a2a2a;
+  --accent:#f59e0b;--accent2:#fcd34d;--text:#f0f0f0;--text-dim:#666;
+  --text-mid:#999;--success:#34d399;--danger:#f87171;
+  --mono:'IBM Plex Mono',monospace;--sans:'Outfit',-apple-system,sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;padding:32px 16px 80px}
+.container{max-width:580px;margin:0 auto}
+.header{text-align:center;margin-bottom:36px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:99px;padding:5px 16px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:18px}
+h1{font-size:clamp(1.7rem,5vw,2.3rem);font-weight:700;letter-spacing:-.03em;margin-bottom:8px}
+.subtitle{color:var(--text-dim);font-size:.9rem;font-weight:300}
+.drop-zone{border:1.5px dashed var(--border);border-radius:20px;padding:52px 24px;text-align:center;cursor:pointer;background:var(--surface);transition:all .25s;position:relative;overflow:hidden;margin-bottom:12px}
+.drop-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(245,158,11,.05) 0%,transparent 70%);opacity:0;transition:opacity .25s}
+.drop-zone:hover::before,.drop-zone.drag-over::before{opacity:1}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--accent);border-style:solid}
+.drop-zone.drag-over{background:rgba(245,158,11,.04)}
+.drop-icon{font-size:2.6rem;margin-bottom:16px;display:block}
+.drop-title{font-size:1rem;font-weight:600;margin-bottom:6px}
+.drop-or{color:var(--text-dim);font-size:.8rem;margin:14px 0}
+.btn-select{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:#000;font-family:var(--sans);font-size:.9rem;font-weight:700;padding:11px 24px;border-radius:10px;border:none;cursor:pointer;transition:all .2s;letter-spacing:.01em}
+.btn-select:hover{background:var(--accent2);transform:translateY(-1px)}
+.drop-formats{margin-top:18px;font-size:.78rem;color:var(--text-dim);font-family:var(--mono);letter-spacing:.05em}
+#fileInput{display:none}
+.settings-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 18px;margin-bottom:8px}
+.settings-label{flex:1;font-size:.85rem;color:var(--text-mid)}
+.settings-label strong{color:var(--text)}
+.settings-val{font-family:var(--mono);font-size:.8rem;color:var(--accent);font-weight:600}
+.progress-card{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px;margin-top:16px}
+.progress-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.progress-lbl{font-size:.875rem;font-weight:600}
+.progress-pct{font-family:var(--mono);font-size:.85rem;color:var(--accent)}
+.progress-track{background:var(--surface2);border-radius:99px;height:6px;overflow:hidden;margin-bottom:12px}
+.progress-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .35s ease;width:0%;position:relative}
+.progress-fill::after{content:'';position:absolute;right:-2px;top:50%;transform:translateY(-50%);width:10px;height:10px;border-radius:50%;background:var(--accent2);box-shadow:0 0 10px var(--accent)}
+.progress-status{font-size:.78rem;color:var(--text-dim);text-align:center;font-family:var(--mono)}
+.results-hd{display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px}
+.results-title{font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim)}
+.results-count{font-family:var(--mono);font-size:.78rem;color:var(--success)}
+.segment-card{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;animation:slideIn .3s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.seg-num{font-family:var(--mono);font-size:.72rem;font-weight:600;color:var(--accent);min-width:26px;text-align:center}
+.seg-info{flex:1;min-width:0}
+.seg-name{font-size:.82rem;font-weight:600;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.seg-time{font-size:.73rem;color:var(--text-dim)}
+.btn-dl{display:inline-flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--sans);font-size:.78rem;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer;text-decoration:none;transition:all .15s;white-space:nowrap}
+.btn-dl:hover{background:var(--accent);color:#000;border-color:var(--accent)}
+.btn-zip{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;margin-top:14px;background:transparent;border:1.5px solid var(--accent);color:var(--accent);font-family:var(--sans);font-size:.95rem;font-weight:700;border-radius:12px;cursor:pointer;transition:all .2s;letter-spacing:.01em}
+.btn-zip:hover{background:var(--accent);color:#000}
+.btn-zip:disabled{opacity:.45;cursor:not-allowed}
+.ios-note{font-size:.75rem;color:var(--text-dim);text-align:center;margin-top:10px;line-height:1.6}
+.error-box{background:rgba(248,113,113,.08);border:1px solid rgba(248,113,113,.25);border-radius:12px;padding:16px;color:var(--danger);font-size:.85rem;margin-top:16px;white-space:pre-line;line-height:1.6}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="badge">🎙 Audio Splitter</div>
+    <h1>音声10分割ツール</h1>
+    <p class="subtitle">m4a・mp3 を10分ごとのMP3に自動分割</p>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <span class="drop-icon">🎵</span>
+    <div class="drop-title">ここにファイルをドロップ</div>
+    <div class="drop-or">または</div>
+    <button class="btn-select" onclick="document.getElementById('fileInput').click()">
+      ファイルを選択
+    </button>
+    <input type="file" id="fileInput" accept=".m4a,.mp3,audio/*">
+    <div class="drop-formats">.m4a &nbsp;&nbsp;/&nbsp;&nbsp; .mp3</div>
+  </div>
+
+  <div class="settings-row">
+    <div class="settings-label">分割間隔 — <strong>10分ごと</strong></div>
+    <div class="settings-val">600 sec</div>
+  </div>
+  <div class="settings-row">
+    <div class="settings-label">出力形式 — <strong>MP3 128kbps</strong></div>
+    <div class="settings-val">mono / stereo 自動</div>
+  </div>
+
+  <div id="errorBox" class="error-box hidden"></div>
+
+  <div id="progressCard" class="progress-card hidden">
+    <div class="progress-hd">
+      <span class="progress-lbl" id="progressLbl">処理中...</span>
+      <span class="progress-pct" id="progressPct">0%</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-status" id="progressStatus">準備中...</div>
+  </div>
+
+  <div id="resultsSection" class="hidden">
+    <div class="results-hd">
+      <span class="results-title">分割結果</span>
+      <span class="results-count" id="resultsCount"></span>
+    </div>
+    <div id="segmentList"></div>
+    <button class="btn-zip" id="btnZip">📦 全ファイルをZIPでダウンロード</button>
+    <p class="ios-note hidden" id="iosNote">
+      ※ iOSでは「↓ DL」を押すと新しいタブで音声が開きます。<br>
+      長押し →「オーディオを保存」でダウンロードできます。
+    </p>
+  </div>
+
+</div>
+<script>
+'use strict';
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+let segments = [];
+if (isIOS) document.getElementById('iosNote').classList.remove('hidden');
+
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', e => { if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) processFile(f); });
+document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); e.target.value = ''; });
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+function tick() { return new Promise(r => setTimeout(r, 0)); }
+function setProgress(pct, label, status) {
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressPct').textContent = Math.round(pct) + '%';
+  if (label !== undefined) document.getElementById('progressLbl').textContent = label;
+  if (status !== undefined) document.getElementById('progressStatus').textContent = status;
+}
+function showError(msg) { const b = document.getElementById('errorBox'); b.textContent = msg; show('errorBox'); hide('progressCard'); }
+function fmtTime(sec) { const m = Math.floor(sec/60), s = Math.floor(sec%60); return m+':'+String(s).padStart(2,'0'); }
+function f32ToI16(f32, offset, len) {
+  const out = new Int16Array(len);
+  for (let i = 0; i < len; i++) { const v = Math.max(-1, Math.min(1, f32[offset+i])); out[i] = v<0 ? v*32768 : v*32767; }
+  return out;
+}
+
+async function processFile(file) {
+  segments = [];
+  hide('errorBox'); hide('resultsSection');
+  document.getElementById('segmentList').innerHTML = '';
+  show('progressCard');
+  setProgress(0, 'ファイル読み込み中', 'メモリに読み込んでいます...');
+  await tick();
+
+  let ab;
+  try { ab = await file.arrayBuffer(); }
+  catch(e) { showError('ファイルの読み込みに失敗しました:\n'+e.message); return; }
+
+  setProgress(8, 'デコード中', '音声データを解析しています（数秒かかる場合があります）...');
+  await tick();
+
+  let audioBuffer;
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    audioBuffer = await ctx.decodeAudioData(ab);
+    ctx.close();
+  } catch(e) {
+    let msg = '音声のデコードに失敗しました。\n\n';
+    if (file.name.toLowerCase().endsWith('.m4a')) msg += '【m4aの注意】Chrome または Safari をご使用ください。\nFirefoxはm4aに非対応です。';
+    else msg += '詳細: '+e.message;
+    showError(msg); return;
+  }
+
+  const SR = audioBuffer.sampleRate;
+  const CH = Math.min(audioBuffer.numberOfChannels, 2);
+  const TOTAL = audioBuffer.length;
+  const CHUNK_SECS = 600;
+  const CHUNK_SAMP = Math.floor(CHUNK_SECS * SR);
+  const N = Math.ceil(TOTAL / CHUNK_SAMP);
+  const baseName = file.name.replace(/\.[^.]+$/, '');
+  const chanData = [];
+  for (let c = 0; c < CH; c++) chanData.push(audioBuffer.getChannelData(c));
+
+  for (let i = 0; i < N; i++) {
+    const startSmp = i * CHUNK_SAMP;
+    const endSmp   = Math.min(startSmp + CHUNK_SAMP, TOTAL);
+    const len      = endSmp - startSmp;
+    const startSec = i * CHUNK_SECS;
+    const durSec   = len / SR;
+    setProgress(12 + (i/N)*82, `MP3変換中 (${i+1} / ${N})`, `チャンク ${i+1} をエンコード中...`);
+    await tick();
+
+    const encoder = new lamejs.Mp3Encoder(CH, SR, 128);
+    const parts = [];
+    const BLOCK = 1152;
+    for (let j = 0; j < len; j += BLOCK) {
+      const bLen = Math.min(BLOCK, len-j);
+      const L = f32ToI16(chanData[0], startSmp+j, bLen);
+      let buf = CH===2 ? encoder.encodeBuffer(L, f32ToI16(chanData[1], startSmp+j, bLen)) : encoder.encodeBuffer(L);
+      if (buf.length > 0) parts.push(buf);
+      if ((j/BLOCK) % 80 === 0) await tick();
+    }
+    const tail = encoder.flush();
+    if (tail.length > 0) parts.push(tail);
+
+    const blob = new Blob(parts, {type:'audio/mpeg'});
+    const segName = baseName+'_'+String(i+1).padStart(2,'0')+'.mp3';
+    segments.push({blob, name:segName, startSec, durSec});
+    addSegCard(segments.length-1, N);
+    if (i===0) show('resultsSection');
+    document.getElementById('resultsCount').textContent = segments.length+' / '+N+' 完了';
+  }
+
+  setProgress(100, '完了！', N+'個のMP3ファイルが作成されました ✓');
+  setTimeout(() => hide('progressCard'), 2000);
+  document.getElementById('resultsCount').textContent = N+'個のファイル';
+}
+
+function addSegCard(idx) {
+  const {blob, name, startSec, durSec} = segments[idx];
+  const url = URL.createObjectURL(blob);
+  const card = document.createElement('div');
+  card.className = 'segment-card';
+  card.innerHTML = `
+    <div class="seg-num">${String(idx+1).padStart(2,'0')}</div>
+    <div class="seg-info">
+      <div class="seg-name">${name}</div>
+      <div class="seg-time">${fmtTime(startSec)} → ${fmtTime(startSec+durSec)} &nbsp;(${fmtTime(durSec)})</div>
+    </div>
+    <a href="${url}" download="${name}" class="btn-dl">↓ DL</a>
+  `;
+  if (isIOS) {
+    card.querySelector('a.btn-dl').addEventListener('click', e => { e.preventDefault(); window.open(url,'_blank'); });
+  }
+  document.getElementById('segmentList').appendChild(card);
+}
+
+document.getElementById('btnZip').addEventListener('click', async () => {
+  const btn = document.getElementById('btnZip');
+  btn.disabled = true; btn.textContent = '📦 ZIPを作成中...';
+  try {
+    const zip = new JSZip();
+    for (const {blob, name} of segments) zip.file(name, await blob.arrayBuffer());
+    const zipBlob = await zip.generateAsync({type:'blob', compression:'STORE'});
+    const url = URL.createObjectURL(zipBlob);
+    if (isIOS) { window.open(url,'_blank'); }
+    else {
+      const a = Object.assign(document.createElement('a'), {href:url, download:'audio_split.zip'});
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  } catch(e) { alert('ZIP作成に失敗しました: '+e.message); }
+  btn.disabled = false; btn.textContent = '📦 全ファイルをZIPでダウンロード';
+});
+</script>
+</body>
+</html>
