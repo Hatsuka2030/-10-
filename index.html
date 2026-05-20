@@ -432,11 +432,20 @@ function addSegCard(idx) {
     </div>
     <a href="${url}" download="${name}" class="btn-dl">↓ DL</a>
   `;
-  if (isIOS) {
-    card.querySelector('a.btn-dl').addEventListener('click', e => {
-      e.preventDefault(); window.open(url, '_blank');
-    });
-  }
+  // after
+if (isIOS) {
+  card.querySelector('a.btn-dl').addEventListener('click', async e => {
+    e.preventDefault();
+    const f = new File([blob], name, { type: blob.type });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      try { await navigator.share({ files: [f], title: name }); }
+      catch(err) { if (err.name !== 'AbortError') window.open(url, '_blank'); }
+    } else {
+      window.open(url, '_blank');
+    }
+  });
+}
+
   document.getElementById('segmentList').appendChild(card);
 }
 
@@ -449,7 +458,17 @@ document.getElementById('btnZip').addEventListener('click', async () => {
     for (const { blob, name } of segments) zip.file(name, await blob.arrayBuffer());
     const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
     const url = URL.createObjectURL(zipBlob);
-    if (isIOS) { window.open(url, '_blank'); }
+    // after
+if (isIOS) {
+  const zf = new File([zipBlob], 'audio_split.zip', { type: 'application/zip' });
+  if (navigator.canShare && navigator.canShare({ files: [zf] })) {
+    try { await navigator.share({ files: [zf], title: 'audio_split.zip' }); }
+    catch(err) { if (err.name !== 'AbortError') window.open(url, '_blank'); }
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
     else {
       const a = Object.assign(document.createElement('a'), { href: url, download: 'audio_split.zip' });
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
